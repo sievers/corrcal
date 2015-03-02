@@ -1,0 +1,5 @@
+Code to calibrate (semi-)redundant radio arrays.
+corrcal.c - C code to do calibration.  needs to be compiled into a shared library
+corrcal.py - python code to do the calibration.  speaks to libcorrcal.so (made from corrcal.c) via ctypes
+test_corrcal.py - python wrapper to test the functioning of the calibration code.
+corrcal_test.dat - sample data file in raw binary format that the test script can understand
