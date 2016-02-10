@@ -1,10 +1,57 @@
 // gcc-4.8 -O3 -shared -fPIC -std=c99 -o libcorrcal.so corrcal.c    
 // gcc-4.8 -O3 -shared -fPIC -std=c99 -o libcorrcal.so corrcal.c   -L/Users/sievers/local/src/OpenBLAS -lopenblas -lpthread
+// gcc-5 -O3 -shared -fPIC -std=c99 -o libcorrcal.so corrcal.c   -L/Users/sievers/local/src/OpenBLAS -lopenblas -lpthread
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <complex.h>
+
+
+
+#define INV_SYMM
+#ifdef INV_SYMM
+/*--------------------------------------------------------------------------------*/
+void dpotrf_(char *uplo, int *n, double *a, int *lda, int *info);
+int dpotrf(char uplo, int n, double *a, int lda)
+{
+  int info=0;
+  dpotrf_(&uplo,&n,a,&lda,&info);
+  if (info)
+    printf("info was %d in dpotrf.\n",info);
+  return info;
+}
+
+/*--------------------------------------------------------------------------------*/
+void dpotri_(char *uplo, int *n, double *a, int *lda, int *info);
+int dpotri(char uplo, int n, double *a, int lda)
+{
+  int info=0;
+  dpotri_(&uplo,&n,a,&lda,&info);
+  if (info)
+    printf("info was %d in dpotrf.\n",info);
+  return info;
+}
+/*--------------------------------------------------------------------------------*/
+void symmetrize_mat(double *a, int n)
+{
+  for (int i=0;i<n;i++)
+    for (int j=i+1;j<n;j++)
+      a[j*n+i]=a[i*n+j];
+}
+/*--------------------------------------------------------------------------------*/
+
+void inverse_symmetric(double *a, int n)
+{
+  dpotrf('L',n,a,n);
+  dpotri('L',n,a,n);
+  symmetrize_mat(a,n);
+}
+/*--------------------------------------------------------------------------------*/
+
+
+#endif
+
 
 void make_curve_part(double *vis, int *ant1, int *ant2, int nvis, int nant, double *mat_in)
 {
@@ -21,6 +68,7 @@ void make_curve_part(double *vis, int *ant1, int *ant2, int nvis, int nant, doub
   }
   
 
+#pragma omp parallel for
   for (int i=0;i<nvis;i++) {
     //for (int i=0;i<10;i++) {
     int j1=ant1[i];
@@ -42,7 +90,16 @@ void make_curve_part(double *vis, int *ant1, int *ant2, int nvis, int nant, doub
 }
 
 /*--------------------------------------------------------------------------------*/
-
+void update_grad(double *vv,double *grad, int *a1, int *a2, int len)
+{
+  for (int ii=0;ii<len;ii++) {
+    double f1=vv[2*ii]*vv[2*ii]+vv[2*ii+1]*vv[2*ii+1];
+    double f2=vv[2*ii]*vv[2*ii]+vv[2*ii+1]*vv[2*ii+1];
+    grad[2*a1[ii]]+=f1+f2;
+    grad[2*a2[ii]]+=f1+f2;
+  }
+}
+/*--------------------------------------------------------------------------------*/
 void sparse_Mg_transpose(double *vecs_in, double *vis, int *ant1, int *ant2, int nvis, int nant, int nvec, double *MTv_in)
 {
   double **MTv=(double **)malloc(sizeof(double *)*nvec);

@@ -1,9 +1,10 @@
 import numpy
 import corrcal
 import time
-f=open('corrcal_test.dat')
+f=open('../corrcal_test.dat')
 fwee=numpy.fromfile(f,numpy.int32,3)
 nant=fwee[0]
+print nant
 nunique=fwee[1]
 nvis=fwee[2]
 xx=numpy.fromfile(f,numpy.float64,nant);
@@ -37,9 +38,9 @@ projvecs=numpy.matrix(projvecs)
 g=numpy.ones(nant)
 
 
-aa=time.time();dg,grad,curve=corrcal.redundant_cal_curve_deriv(vis,ant1,ant2,inds,projvecs,1e2);bb=time.time();print bb-aa
+aa=time.time();dg,grad,curve=corrcal.redundant_cal_curve_deriv(vis,ant1,ant2,inds,projvecs,1e0);bb=time.time();print bb-aa
 
-aa=time.time();g=corrcal.redundant_cal(vis,ant1,ant2,inds,projvecs,1e-2);bb=time.time();print bb-aa
+aa=time.time();g=corrcal.redundant_cal(vis,ant1,ant2,inds,projvecs,1e2);bb=time.time();print bb-aa
 assert(1==0)
 
 #mat=corrcal.make_curve_part(vis,ant1,ant2)

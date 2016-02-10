@@ -5,6 +5,12 @@ mylib=ctypes.cdll.LoadLibrary("libcorrcal.so")
 make_curve_part_c=mylib.make_curve_part
 make_curve_part_c.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_int,ctypes.c_int,ctypes.c_void_p]
 
+update_grad_c=mylib.update_grad
+update_grad_c.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_int]
+
+inverse_symmetric_c=mylib.inverse_symmetric
+inverse_symmetric_c.argtypes=[ctypes.c_void_p,ctypes.c_int]
+
 sparse_Mg_transpose_c=mylib.sparse_Mg_transpose
 sparse_Mg_transpose_c.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_void_p]
 
@@ -79,6 +85,7 @@ class sparse:
 
 
 
+
     def inv(self):
         val=self.copy()
         val.isinv=not(self.isinv)
@@ -95,11 +102,19 @@ class sparse:
         sparse_inv2_c(self.diag.ctypes.data,self.vecs.ctypes.data,nn[1],nn[0],val.diag.ctypes.data,val.mat.ctypes.data )
         return val
 
+
+def inverse_symmetric(mat):
+    n=len(mat)
+    inverse_symmetric_c(mat.ctypes.data,n)
+
+
 def redundant_cal(vis,ant1,ant2,ind,projvecs,amp=1.0,thresh=1e-7):
     nant=numpy.max([numpy.max(ant1),numpy.max(ant2)])+1
     g=(numpy.ones(nant))+numpy.complex(0,0)
     finished=False
     vis_cur=vis.copy()
+
+    
 
     #projvecs=numpy.zeros([4,2*nant]);
     #projvecs[0,0::2]=1;
@@ -139,6 +154,7 @@ def redundant_cal(vis,ant1,ant2,ind,projvecs,amp=1.0,thresh=1e-7):
     
     
 def redundant_cal_curve_deriv(vis,ant1,ant2,ind,projvecs,amp=1.0):
+
     nant=numpy.max([numpy.max(ant1),numpy.max(ant2)])+1
     nn=numpy.shape(ind)
     nblock=nn[0]
@@ -151,6 +167,8 @@ def redundant_cal_curve_deriv(vis,ant1,ant2,ind,projvecs,amp=1.0):
     vecs[1,1::2]=amp
     big_tmp=numpy.matrix(numpy.zeros([2*nblock,2*nant]))
 
+    noise_grad=numpy.zeros(2*nant);
+    print  'doing gradient'
     for i in range(nblock):
         m=ind[i][1]-ind[i][0]
         a1=ant1[ind[i][0]:ind[i][1]]
@@ -159,8 +177,18 @@ def redundant_cal_curve_deriv(vis,ant1,ant2,ind,projvecs,amp=1.0):
         cn_inv=cn.inv()
         myvis=vis[2*ind[i][0]:2*ind[i][1]]
         vv=cn_inv*myvis
-        grad=grad+sparse_Mg_transpose(vv,myvis,a2,a1,nant)
         
+        grad=grad+sparse_Mg_transpose(vv,myvis,a2,a1,nant)
+        if (1):
+            update_grad(vv,noise_grad,a1,a2)
+        else:
+            for ii in range(a1.size):
+                f1=(vv[2*ii]**2+vv[2*ii+1]**2)
+                f2=(vv[2*ii]**2+vv[2*ii+1]**2)
+                noise_grad[2*a1[ii]]=noise_grad[2*a1[ii]]+(f1+f2)
+                noise_grad[2*a2[ii]]=noise_grad[2*a2[ii]]+(f1+f2)
+
+
         tmp=numpy.matrix(sparse_Mg_transpose(myvis,cn_inv.vecs,a1,a2,nant))
         if 0:
             curve=curve+tmp.transpose()*tmp
@@ -168,11 +196,16 @@ def redundant_cal_curve_deriv(vis,ant1,ant2,ind,projvecs,amp=1.0):
             big_tmp[2*i:2*i+2,:]=tmp
             #nn=tmp.shape
             #add_outer_product_c(curve.ctypes.data,tmp.ctypes.data,nn[1],nn[0])
+    print 'making curve'
     curve=make_curve_part(vis,ant1,ant2,nant)-big_tmp.transpose()*big_tmp
     
+    #grad=grad-noise_grad
+
     cc=curve+projvecs.transpose()*projvecs
+    print 'inverting'
     minv=inverse_projvected(cc,projvecs)
     dg=grad*minv
+
     return dg,grad,curve
         
 
@@ -184,6 +217,9 @@ def make_curve_part(vis,ant1,ant2,nant=0):
     mat=numpy.zeros([2*nant,2*nant])
     make_curve_part_c(vis.ctypes.data,  ant1.ctypes.data,  ant2.ctypes.data,  vis.size/2,  nant,mat.ctypes.data)
     return mat
+
+def update_grad(vv,grad,a1,a2):
+    update_grad_c(vv.ctypes.data,grad.ctypes.data,a1.ctypes.data,a2.ctypes.data,a1.size)
 
 def sparse_Mg_transpose(vis,vecs,ant1,ant2,nant=0):
     if (nant==0):
@@ -234,7 +270,12 @@ def sparse_inv(diag,vecs):
     sparse_inv_c(diag.ctypes.data,vecs.ctypes.data,n,nvec,vecs_inv.ctypes.data,diag_out.ctypes.data)
     return vecs_inv,diag_out
 def inverse_projvected(mat,vecs):
-    minv=numpy.linalg.inv(mat)
+    #print mat.shape
+    #print vecs.shape
+
+    #minv=numpy.linalg.inv(mat)
+    minv=mat.copy()
+    inverse_symmetric(minv)
     tmp=vecs*minv*vecs.transpose()
     small_mat=numpy.linalg.inv(tmp)
     fwee=vecs*minv
